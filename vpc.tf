@@ -119,16 +119,11 @@ resource "aws_instance" "inst-subnet_1" {
 }
 
 resource "aws_instance" "inst-pub-subnet_1" {
-  ami           = "ami-00785f4835c6acf64"
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.pub-subnet_1.id
-  vpc_security_group_ids = [aws_security_group.pub-instance-sg.id]
+  ami                         = "ami-00785f4835c6acf64"
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.pub-subnet_1.id
+  vpc_security_group_ids      = [aws_security_group.pub-instance-sg.id]
   associate_public_ip_address = true
-  user_data = <<- EOF
-                #!/bin/bash
-                echo "<H1>Welcome to GPIS Consulting</H1>"
-                > index.html
-                EOF
   user_data_replace_on_change = true
   tags = {
     Name = "inst-pub-subnet_1"
@@ -136,16 +131,11 @@ resource "aws_instance" "inst-pub-subnet_1" {
 }
 
 resource "aws_instance" "inst-pub-subnet_2" {
-  ami           = "ami-00785f4835c6acf64"
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.pub-subnet_2.id
-  vpc_security_group_ids = [aws_security_group.pub-instance-sg.id]
+  ami                         = "ami-00785f4835c6acf64"
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.pub-subnet_2.id
+  vpc_security_group_ids      = [aws_security_group.pub-instance-sg.id]
   associate_public_ip_address = true
-  user_data = <<- EOF
-                #!/bin/bash
-		echo "<H1>Welcome to GPIS Consulting</H1>"
-		> index.html
-		EOF
   user_data_replace_on_change = true
   tags = {
     Name = "inst-pub-subnet_2"
@@ -161,19 +151,19 @@ resource "aws_instance" "inst-subnet_2" {
   }
 }
 
-resource "aws_security_group "pub-instance-sg" {
-  name = "pub-instance-sg"
+resource "aws_security_group" "pub-instance-sg" {
+  name   = "pub-instance-sg"
   vpc_id = aws_vpc.vpc_london.id
   ingress {
-    from_port = 22
-    to_port = 22
-    protocol = tcp
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    from_port = 8080
-    to_port = 8080
-    protocol = tcp
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
