@@ -110,9 +110,10 @@ resource "aws_route_table_association" "subnet1-RTA" {
 }
 
 resource "aws_instance" "inst-subnet_1" {
-  ami           = "ami-00785f4835c6acf64"
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.subnet_1.id
+  ami                    = "ami-00785f4835c6acf64"
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.subnet_1.id
+  vpc_security_group_ids = [aws_security_group.pub-instance-sg.id]
   tags = {
     Name = "inst-subnet_1"
   }
@@ -125,6 +126,14 @@ resource "aws_instance" "inst-pub-subnet_1" {
   vpc_security_group_ids      = [aws_security_group.pub-instance-sg.id]
   associate_public_ip_address = true
   user_data_replace_on_change = true
+  user_data                    = <<-EOF
+             #!/bin/bash
+             sudo yum install -y httpd
+             systemctl start httpd
+             systemctl enable httpd
+             echo "Hello World" >> /var/www/html/index.html
+             EOF
+
   tags = {
     Name = "inst-pub-subnet_1"
   }
@@ -136,6 +145,13 @@ resource "aws_instance" "inst-pub-subnet_2" {
   subnet_id                   = aws_subnet.pub-subnet_2.id
   vpc_security_group_ids      = [aws_security_group.pub-instance-sg.id]
   associate_public_ip_address = true
+  user_data                    = <<-EOF
+	     #!/bin/bash
+             sudo yum install -y httpd
+             systemctl start httpd
+             systemctl enable httpd
+             echo "Hello World" >> /var/www/html/index.html
+             EOF
   user_data_replace_on_change = true
   tags = {
     Name = "inst-pub-subnet_2"
@@ -143,9 +159,10 @@ resource "aws_instance" "inst-pub-subnet_2" {
 }
 
 resource "aws_instance" "inst-subnet_2" {
-  ami           = "ami-00785f4835c6acf64"
-  instance_type = "t2.micro"
-  subnet_id     = aws_subnet.subnet_2.id
+  ami                    = "ami-00785f4835c6acf64"
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.subnet_2.id
+  vpc_security_group_ids = [aws_security_group.pub-instance-sg.id]
   tags = {
     Name = "inst-subnet_2"
   }
@@ -161,8 +178,8 @@ resource "aws_security_group" "pub-instance-sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    from_port   = 8080
-    to_port     = 8080
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
