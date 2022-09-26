@@ -3,24 +3,13 @@ resource "aws_vpc" "vpc_london" {
   enable_dns_support   = true
   enable_dns_hostnames = true
   tags = {
-    Name = "vpc-london"
+    Name = "${terraform.workspace}-vpc-london"
   }
 
 }
 
 output "vpc_london" {
   value = aws_vpc.vpc_london.id
-}
-
-#Create subnet # 1 in eu-west-2
-resource "aws_subnet" "subnet_1" {
-  availability_zone = "eu-west-2a"
-  vpc_id            = aws_vpc.vpc_london.id
-  cidr_block        = "10.0.1.0/24"
-
-  tags = {
-    Name = "subnet_1"
-  }
 }
 
 #Create public subnet # 1 in eu-west-2
@@ -30,20 +19,7 @@ resource "aws_subnet" "pub-subnet_1" {
   cidr_block              = "10.0.100.0/24"
   map_public_ip_on_launch = true
   tags = {
-    Name = "pub-subnet_1"
-  }
-
-}
-
-
-#Create subnet #2  in eu-west-2
-resource "aws_subnet" "subnet_2" {
-  vpc_id            = aws_vpc.vpc_london.id
-  availability_zone = "eu-west-2b"
-  cidr_block        = "10.0.2.0/24"
-
-  tags = {
-    Name = "subnet_2"
+    Name = "${terraform.workspace}-pub-subnet_1"
   }
 
 }
@@ -55,7 +31,7 @@ resource "aws_subnet" "pub-subnet_2" {
   cidr_block              = "10.0.200.0/24"
   map_public_ip_on_launch = true
   tags = {
-    Name = "pub-subnet_2"
+    Name = "${terraform.workspace}-pub-subnet_2"
   }
 
 }
@@ -81,14 +57,6 @@ resource "aws_route_table" "pub-subnet-RT" {
   }
 }
 
-resource "aws_route_table" "priv-subnet-RT" {
-  vpc_id = aws_vpc.vpc_london.id
-
-  tags = {
-    Name = "priv-subnet-RT"
-  }
-}
-
 resource "aws_route_table_association" "pub-subnet1-RTA" {
   subnet_id      = aws_subnet.pub-subnet_1.id
   route_table_id = aws_route_table.pub-subnet-RT.id
@@ -99,84 +67,97 @@ resource "aws_route_table_association" "pub-subnet2-RTA" {
   route_table_id = aws_route_table.pub-subnet-RT.id
 }
 
-resource "aws_route_table_association" "subnet2-RTA" {
-  subnet_id      = aws_subnet.subnet_2.id
-  route_table_id = aws_route_table.priv-subnet-RT.id
-}
-
-resource "aws_route_table_association" "subnet1-RTA" {
-  subnet_id      = aws_subnet.subnet_1.id
-  route_table_id = aws_route_table.priv-subnet-RT.id
-}
-
-resource "aws_instance" "inst-subnet_1" {
-  ami                    = "ami-00785f4835c6acf64"
-  instance_type          = "t2.micro"
-  subnet_id              = aws_subnet.subnet_1.id
-  vpc_security_group_ids = [aws_security_group.pub-instance-sg.id]
-  tags = {
-    Name = "inst-subnet_1"
-  }
-}
-
-resource "aws_instance" "inst-pub-subnet_1" {
-  ami                         = "ami-00785f4835c6acf64"
-  instance_type               = "t2.micro"
-  subnet_id                   = aws_subnet.pub-subnet_1.id
-  vpc_security_group_ids      = [aws_security_group.pub-instance-sg.id]
-  associate_public_ip_address = true
-  user_data_replace_on_change = true
-  user_data                    = <<-EOF
-             #!/bin/bash
-             sudo yum install -y httpd
-             systemctl start httpd
-             systemctl enable httpd
-             echo "Hello World" >> /var/www/html/index.html
-             EOF
-
-  tags = {
-    Name = "inst-pub-subnet_1"
-  }
-}
-
-resource "aws_instance" "inst-pub-subnet_2" {
-  ami                         = "ami-00785f4835c6acf64"
-  instance_type               = "t2.micro"
-  subnet_id                   = aws_subnet.pub-subnet_2.id
-  vpc_security_group_ids      = [aws_security_group.pub-instance-sg.id]
-  associate_public_ip_address = true
-  user_data                    = <<-EOF
+resource "aws_launch_configuration" "instance" {
+  image_id        = "ami-00785f4835c6acf64"
+  instance_type   = "t2.micro"
+  security_groups = [aws_security_group.instance-sg.id]
+  user_data       = <<-EOF
 	     #!/bin/bash
              sudo yum install -y httpd
              systemctl start httpd
              systemctl enable httpd
              echo "Hello World" >> /var/www/html/index.html
              EOF
-  user_data_replace_on_change = true
-  tags = {
-    Name = "inst-pub-subnet_2"
+}
+
+resource "aws_autoscaling_group" "instance-asg" {
+  name                 = "instance-asg"
+  launch_configuration = aws_launch_configuration.instance.name
+  vpc_zone_identifier  = data.aws_subnets.subnets_london.ids
+  target_group_arns    = [aws_lb_target_group.lb-tgroup.arn]
+  health_check_type    = "EC2"
+  min_size             = 1
+  max_size             = 2
+  tag {
+    key                 = "Name"
+    value               = "instance"
+    propagate_at_launch = true
+  }
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-resource "aws_instance" "inst-subnet_2" {
-  ami                    = "ami-00785f4835c6acf64"
-  instance_type          = "t2.micro"
-  subnet_id              = aws_subnet.subnet_2.id
-  vpc_security_group_ids = [aws_security_group.pub-instance-sg.id]
-  tags = {
-    Name = "inst-subnet_2"
+data "aws_subnets" "subnets_london" {
+  filter {
+    name   = "vpc-id"
+    values = [aws_vpc.vpc_london.id]
   }
 }
 
-resource "aws_security_group" "pub-instance-sg" {
-  name   = "pub-instance-sg"
+resource "aws_lb" "instance-lb" {
+  name               = "instance-lb"
+  load_balancer_type = "application"
+  subnets            = data.aws_subnets.subnets_london.ids
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.instance-lb.arn
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "404: page not found"
+      status_code  = 404
+    }
+  }
+}
+
+resource "aws_lb_target_group" "lb-tgroup" {
+  name     = "lb-tgroup"
+  port     = var.http_port
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.vpc_london.id
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 15
+    timeout             = 3
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+resource "aws_lb_listener_rule" "lb_listener_rule" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 100
+  condition {
+    path_pattern {
+      values = ["*"]
+    }
+  }
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.lb-tgroup.arn
+  }
+}
+
+resource "aws_security_group" "lb_sg" {
+  name   = "lb_sg"
   vpc_id = aws_vpc.vpc_london.id
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
   ingress {
     from_port   = 80
     to_port     = 80
@@ -189,4 +170,34 @@ resource "aws_security_group" "pub-instance-sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+resource "aws_security_group" "instance-sg" {
+  name   = "instance-sg"
+  vpc_id = aws_vpc.vpc_london.id
+  ingress {
+    from_port   = var.ssh_port
+    to_port     = var.ssh_port
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "-1"
+    security_groups = [aws_security_group.lb_sg.id]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+output "alb_dns_name" {
+  value = aws_lb.instance-lb.dns_name
+}
+
+output "london_subnets" {
+  value = data.aws_subnets.subnets_london.ids
 }
